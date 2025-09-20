@@ -1,39 +1,39 @@
-# Dockerfile.pi — Pi 5 runtime (linux/arm64) with GStreamer + Qt (X11) + your app
+# Dockerfile.pi — patch: add GI path + extra libs
 FROM python:3.10-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
-# Install system libs:
-# - GStreamer core + base/good/bad/libav + libcamera plugin
-# - gst-python runtime (python3-gi + GIR)
-# - X11 / OpenGL libs for PySide6 to render via XWayland/X11
+# Let /usr/local Python see Debian's dist-packages (python3-gi, etc.)
+ENV PYTHONPATH=/usr/lib/python3/dist-packages
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3-gi python3-gst-1.0 gir1.2-gst-plugins-base-1.0 \
+    # GStreamer + Python GI bindings
+    python3-gi python3-gst-1.0 \
+    gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
     gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-libcamera \
-    libx11-6 libxcb1 libxrender1 libxext6 libxi6 libxkbcommon0 libxkbcommon-x11-0 \
-    libxrandr2 libxfixes3 libxdamage1 libgl1 libglib2.0-0 v4l-utils \
+    gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-libcamera gstreamer1.0-gl \
+    v4l-utils \
+    # X11 / XCB stack needed by Qt6 (PySide6)
+    libx11-6 libx11-xcb1 libxcb1 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
+    libxcb-render0 libxcb-render-util0 libxcb-shm0 libxcb-icccm4 libxcb-xkb1 \
+    libxcb-randr0 libxcb-shape0 libxcb-sync1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xinput0 \
+    libxkbcommon0 libxkbcommon-x11-0 libxext6 libxrandr2 libxi6 libxrender1 \
+    libfontconfig1 libfreetype6 libgl1 libglib2.0-0 \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# Copy only requirements first to leverage Docker layer cache
 COPY requirements.txt ./
-# On Pi we’ll use the gstreamer backend; opencv stays installed but unused (ok).
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of your app
 COPY . .
 
-# Default runtime settings (override at docker run)
+# Defaults (override at docker run)
 ENV VIDEO_BACKEND=gstreamer \
     OUTPUT_DIR=/data/output \
     MODEL_PATH=/models/current.onnx \
     FPS=30 \
     RESOLUTION=1280x720
 
-# Create default folders (host will volume-mount too)
 RUN mkdir -p /data/output /models
 
-# App entry point
 CMD ["python", "run_app.py"]
