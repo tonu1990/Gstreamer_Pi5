@@ -1,20 +1,27 @@
-# Use Python 3.11 to match Debian Bookworm's python3-gi
+# Dockerfile.pi — Raspberry Pi 5 GUI + GStreamer (linux/arm64)
+
+# 1) Use Python 3.11 to match Bookworm's python3-gi ABI
 FROM python:3.11-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
-# Let /usr/local Python see Debian's dist-packages (python3-gi lives there)
+# Let /usr/local Python see Debian dist-packages (where python3-gi installs)
 ENV PYTHONPATH=/usr/lib/python3/dist-packages
-# (Optional but fine) force Qt to use X11/xcb
-ENV QT_QPA_PLATFORM=xcb
 
+# Force Qt to use X11/xcb and PySide6's plugin paths (avoid cv2 plugin confusion)
+ENV QT_QPA_PLATFORM=xcb
+ENV QT_PLUGIN_PATH=/usr/local/lib/python3.11/site-packages/PySide6/Qt/plugins
+ENV QT_QPA_PLATFORM_PLUGIN_PATH=/usr/local/lib/python3.11/site-packages/PySide6/Qt/plugins/platforms
+
+# 2) OS deps: GStreamer + GI bindings + X11/XCB libs needed by PySide6
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # GStreamer + Python GI bindings
+    # GI / GStreamer
     python3-gi python3-gst-1.0 \
+    gobject-introspection libgirepository-1.0-1 \
     gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
     gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-libcamera gstreamer1.0-gl \
+    gstreamer1.0-plugins-bad gstreamer1.0-libcamera gstreamer1.0-gl \
     v4l-utils \
-    # X11 / XCB stack needed by Qt6 (PySide6)
+    # X11/XCB/GL stack for Qt6
     libx11-6 libx11-xcb1 libxcb1 libxcb-cursor0 libxcb-image0 libxcb-keysyms1 \
     libxcb-render0 libxcb-render-util0 libxcb-shm0 libxcb-icccm4 libxcb-xkb1 \
     libxcb-randr0 libxcb-shape0 libxcb-sync1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xinput0 \
@@ -22,14 +29,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libfontconfig1 libfreetype6 libgl1 libglib2.0-0 libxshmfence1 libdbus-1-3 \
   && rm -rf /var/lib/apt/lists/*
 
+# 3) App deps
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# If OpenCV is installed (likely via requirements.txt), remove its bundled Qt plugins
+# to prevent Qt from accidentally using cv2's plugin dir instead of PySide6's.
+RUN sh -lc 'rm -rf /usr/local/lib/python*/site-packages/cv2/qt/plugins || true'
+
+# 4) App code
 COPY . .
 
-# Defaults (override at docker run)
+# 5) Defaults (can be overridden at docker run)
 ENV VIDEO_BACKEND=gstreamer \
     OUTPUT_DIR=/data/output \
     MODEL_PATH=/models/current.onnx \
@@ -38,4 +51,5 @@ ENV VIDEO_BACKEND=gstreamer \
 
 RUN mkdir -p /data/output /models
 
+# 6) Entrypoint
 CMD ["python", "run_app.py"]
