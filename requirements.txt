@@ -1,0 +1,6 @@
+# Core UI + future ML deps (kept lightweight for Step 1 & 2)
+pyside6>=6.7.0
+opencv-python>=4.10.0.0
+onnxruntime>=1.18.0
+python-dotenv>=1.0.0
+loguru>=0.7.2

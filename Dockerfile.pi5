@@ -1,0 +1,24 @@
+FROM python:3.10-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# GStreamer + Python GI bindings + camera stack
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-gi python3-gst-1.0 gir1.2-gst-plugins-base-1.0 \
+    gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-libcamera \
+    v4l-utils libgl1 \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Your sources
+COPY . .
+
+# Default to GStreamer backend on Pi
+ENV VIDEO_BACKEND=gstreamer
+
+# Qt needs X11 from host; the GUI will use host's DISPLAY
+CMD ["python", "run_app.py"]

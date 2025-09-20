@@ -1,0 +1,70 @@
+name: Build & Push Gstreamer App Pi5 Image (GHCR)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Dockerfile.pi'
+      - 'requirements.txt'
+      - 'App_dev/**'
+      - 'run_app.py'
+      - '.github/workflows/build-pi5-image.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: edge-video           # change if you prefer
+  REGISTRY: ghcr.io
+  # final image will be ghcr.io/<owner>/<IMAGE_NAME>:pi5-<tag>
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (arm emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          # GITHUB_TOKEN has packages:write from permissions above
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=pi5-latest
+            type=sha,format=long,prefix=pi5-
+            # add semver tags if you use releases:
+            # type=ref,event=tag,enable=true,prefix=pi5-
+
+      - name: Build & Push (linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.pi
+          push: true
+          platforms: linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "Pushed tags:"
+          echo "${{ steps.meta.outputs.tags }}"
